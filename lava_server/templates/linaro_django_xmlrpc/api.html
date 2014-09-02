@@ -1,0 +1,53 @@
+{% extends "layouts/content-bootstrap.html" %}
+{% load i18n %}
+
+{% block title %}
+{{ block.super }} | {% trans "XML-RPC" %}
+{% endblock %}
+
+
+{% block breadcrumbs %}
+{{ block.super }}
+<li><a href="{% url 'lava.home' %}">{% trans "LAVA" %}</a></li>
+<li>{% trans "API" %}</li>
+<li><a href="{% url 'lava.api_help' %}">{% trans "Available Methods" %}</a></li>
+{% endblock %}
+
+
+{% block navigation %}
+<div id="lava-extension-navigation">
+  <ul>
+    <li><a class="lava-back" href="{% url 'lava.home' %}"
+      >{% trans "Back to LAVA" %}</a></li>
+    <li><a href="{% url 'lava.api_help' %}">{% trans "API Help" %}</a></li>
+    <li><a href="{% url 'linaro_django_xmlrpc.views.tokens' %}">{% trans "Authentication Tokens" %}</a></li>
+  </ul>
+</div>
+{% endblock %}
+
+
+{% block content %}
+<h2>About XML-RPC API</h2>
+<p>LAVA Server offers API services as an XML-RPC server. You can interact with it using any XML-RPC
+client. For example, in python you can do this:</p>
+<pre>
+import xmlrpclib
+server = xmlrpclib.ServerProxy("{{ site_url }}{% url 'lava.api_handler' %}")
+print server.system.listMethods()
+</pre>
+
+<h2 id="top">Available functions</h2>
+<div>
+  {% for method in methods %}
+  [&nbsp;<a href="#{{method.name}}">{{ method.name }}</a>&nbsp;]
+  {% endfor %}
+</div>
+
+{% for method in methods %}<hr/>
+<div id="{{ method.name }}">
+  <h3><a href="#{{method.name}}">{{ method.name }}</a></h3>
+  <div><pre>{{ method.help }}</pre></div>
+  <a href="#top">Available functions</a>
+</div>
+{% endfor %}
+{% endblock %}
