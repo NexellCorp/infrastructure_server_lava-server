@@ -1,3 +1,4 @@
+import os
 import json
 from django.conf import settings
 from django.template import defaultfilters as filters
@@ -258,7 +259,13 @@ class IndexJobTable(JobTable):
 class TagsColumn(tables.Column):
 
     def render(self, value):
-        return ', '.join([x.name for x in value.all()])
+        tag_id = 'tag-%s' % os.urandom(4).encode('hex')
+        tags = ''
+        if len(value.all()) > 0:
+            tags = '<p class="collapse" id="%s">' % tag_id
+            tags += ',<br>'.join('<abbr data-toggle="tooltip" title="%s">%s</abbr>' % (tag.description, tag.name) for tag in value.all())
+            tags += '</p><p><a class="btn btn-xs btn-success" data-toggle="collapse" data-target="#%s"><span class="glyphicon glyphicon-eye-open"></span></p></a></p>' % tag_id
+        return mark_safe(tags)
 
 
 class FailedJobTable(JobTable):
@@ -352,33 +359,24 @@ class DeviceHealthTable(LavaTable):
 
     hostname = tables.TemplateColumn('''
     {% if record.too_long_since_last_heartbeat or record.status == record.RETIRED or record.status == record.OFFLINE %}
-    <img src="{{ STATIC_URL }}lava_scheduler_app/images/dut-offline-icon.png"
-          alt="{{ offline }}" />
+    <span class="glyphicon glyphicon-thumbs-down text-danger"></span>
     {% else %}
-    <img src="{{ STATIC_URL }}lava_scheduler_app/images/dut-available-icon.png"
-          alt="{{ online }}" />
+    <span class="glyphicon glyphicon-thumbs-up text-success"></span>
     {% endif %}
-    {% if record.is_master %}
-    <b><a href="{{ record.get_absolute_url }}">{{ record.hostname }}</a></b>
-    {% else %}
     <a href="{{ record.get_absolute_url }}">{{ record.hostname }}</a>
-    {% endif %}
-        ''')
+    ''')
     worker_host = tables.TemplateColumn('''
     {% if record.too_long_since_last_heartbeat %}
-    <img src="{{ STATIC_URL }}lava_scheduler_app/images/dut-offline-icon.png"
-          alt="{{ offline }}" />
+    <span class="glyphicon glyphicon-thumbs-down text-danger"></span>
     {% else %}
-    <img src="{{ STATIC_URL }}lava_scheduler_app/images/dut-available-icon.png"
-          alt="{{ online }}" />
+    <span class="glyphicon glyphicon-thumbs-up text-success"></span>
     {% endif %}
     {% if record.is_master %}
     <b><a href="{{ record.worker_host.get_absolute_url }}">{{ record.worker_host }}</a></b>
     {% else %}
     <a href="{{ record.worker_host.get_absolute_url }}">{{ record.worker_host }}</a>
     {% endif %}
-        ''')
-
+    ''')
     health_status = tables.Column()
     last_report_time = DateColumn(
         verbose_name="last report time",
@@ -452,37 +450,30 @@ class DeviceTable(LavaTable):
 
     hostname = tables.TemplateColumn('''
     {% if record.too_long_since_last_heartbeat or record.status == record.RETIRED or record.status == record.OFFLINE %}
-    <img src="{{ STATIC_URL }}lava_scheduler_app/images/dut-offline-icon.png"
-          alt="{{ offline }}" />
+    <span class="glyphicon glyphicon-thumbs-down text-danger"></span>
     {% else %}
-    <img src="{{ STATIC_URL }}lava_scheduler_app/images/dut-available-icon.png"
-          alt="{{ online }}" />
+    <span class="glyphicon glyphicon-thumbs-up text-success"></span>
     {% endif %}
-    {% if record.is_master %}
-    <b><a href="{{ record.get_absolute_url }}">{{ record.hostname }}</a></b>
-    {% else %}
     <a href="{{ record.get_absolute_url }}">{{ record.hostname }}</a>
-    {% endif %}
-        ''')
+    ''')
     worker_host = tables.TemplateColumn('''
     {% if record.too_long_since_last_heartbeat %}
-    <img src="{{ STATIC_URL }}lava_scheduler_app/images/dut-offline-icon.png"
-          alt="{{ offline }}" />
+    <span class="glyphicon glyphicon-thumbs-down text-danger"></span>
     {% else %}
-    <img src="{{ STATIC_URL }}lava_scheduler_app/images/dut-available-icon.png"
-          alt="{{ online }}" />
+    <span class="glyphicon glyphicon-thumbs-up text-success"></span>
     {% endif %}
     {% if record.is_master %}
     <b><a href="{{ record.worker_host.get_absolute_url }}">{{ record.worker_host }}</a></b>
     {% else %}
     <a href="{{ record.worker_host.get_absolute_url }}">{{ record.worker_host }}</a>
     {% endif %}
-        ''')
+    ''')
     device_type = tables.Column()
     status = ExpandedStatusColumn("status")
     owner = RestrictedDeviceColumn()
     owner.orderable = False
     health_status = tables.Column(verbose_name='Health')
+    tags = TagsColumn()
 
     class Meta(LavaTable.Meta):
         model = Device
@@ -529,21 +520,20 @@ class WorkerTable(tables.Table):
     def __init__(self, *args, **kwargs):
         super(WorkerTable, self).__init__(*args, **kwargs)
         self.length = 10
+        self.show_help = True
 
     hostname = tables.TemplateColumn('''
     {% if record.too_long_since_last_heartbeat %}
-    <img src="{{ STATIC_URL }}lava_scheduler_app/images/dut-offline-icon.png"
-          alt="{{ offline }}" />
+    <span class="glyphicon glyphicon-thumbs-down text-danger"></span>
     {% else %}
-    <img src="{{ STATIC_URL }}lava_scheduler_app/images/dut-available-icon.png"
-          alt="{{ online }}" />
+    <span class="glyphicon glyphicon-thumbs-up text-success"></span>
     {% endif %}
     {% if record.is_master %}
     <b><a href="{{ record.get_absolute_url }}">{{ record.hostname }}</a></b>
     {% else %}
     <a href="{{ record.get_absolute_url }}">{{ record.hostname }}</a>
     {% endif %}
-        ''')
+    ''')
     status = tables.TemplateColumn('''
     {% if record.too_long_since_last_heartbeat %}
     down

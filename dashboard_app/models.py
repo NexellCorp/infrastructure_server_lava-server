@@ -52,8 +52,8 @@ from django.dispatch import receiver
 from django.template import Template, Context
 from django.template.defaultfilters import filesizeformat, slugify
 from django.template.loader import render_to_string
-from django.utils.translation import ugettext as _
-from django.utils.translation import ungettext
+from django.utils.translation import ugettext_lazy as _
+from django.utils.translation import ungettext_lazy
 from django.db.utils import DatabaseError
 from django_restricted_resource.models import RestrictedResource
 from linaro_dashboard_bundle.io import DocumentIO
@@ -64,7 +64,7 @@ from dashboard_app.signals import bundle_was_deserialized
 
 
 def _help_max_length(max_length):
-    return ungettext(
+    return ungettext_lazy(
         u"Maximum length: {0} character",
         u"Maximum length: {0} characters",
         max_length).format(max_length)
@@ -208,7 +208,7 @@ class BundleStream(RestrictedResource):
         unique=True,
     )
 
-    is_anonymous = models.BooleanField()
+    is_anonymous = models.BooleanField(default=False)
 
     def __unicode__(self):
         return self.pathname
@@ -479,7 +479,8 @@ class Bundle(models.Model):
         verbose_name=_(u"Is deserialized"),
         help_text=_(u"Set when document has been analyzed and loaded"
                     " into the database"),
-        editable=False)
+        editable=False,
+        default=False)
 
     _raw_content = models.FileField(
         verbose_name=_(u"Content"),
@@ -625,6 +626,8 @@ class Bundle(models.Model):
             try:
                 fmt, doc = DocumentIO.load(self.content)
                 return fmt
+            except Exception:
+                return "unknown"
             finally:
                 self.content.close()
 
@@ -714,10 +717,6 @@ class Test(models.Model):
     def __unicode__(self):
         return self.name or self.test_id
 
-    @models.permalink
-    def get_absolute_url(self):
-        return self.test_id
-
     def count_results_without_test_case(self):
         return TestResult.objects.filter(
             test_run__test=self,
@@ -763,10 +762,6 @@ class TestCase(models.Model):
 
     def __unicode__(self):
         return self.name or self.test_case_id
-
-    @models.permalink
-    def get_absolute_url(self):
-        return ("dashboard_app.test_case.details", [self.test.test_id, self.test_case_id])
 
     def count_failures(self):
         return self.test_results.filter(result=TestResult.RESULT_FAIL).count()
@@ -978,8 +973,8 @@ class TestRun(models.Model):
                     "internet time servers.<br/>"
                     "This field allows us to track tests results that "
                     "<em>certainly</em> have correct time if we ever end up "
-                    "with lots of tests results from 1972")
-    )
+                    "with lots of tests results from 1972"),
+        default=False)
 
     microseconds = models.BigIntegerField(
         blank=True,
@@ -2130,24 +2125,43 @@ class ImageReportChart(models.Model):
                     comments__isnull=True).count() != 0
 
                 test_filter_id = "%s-%s" % (test_id, image_chart_filter.id)
-                chart_item = {
-                    "filter_rep": image_chart_filter.representation,
-                    "test_filter_id": test_filter_id,
-                    "chart_test_id": chart_test_id,
-                    "link": test_run.get_absolute_url(),
-                    "alias": alias,
-                    "number": str(match.tag),
-                    "date": str(test_run.bundle.uploaded_on),
-                    "pass": denorm.count_fail == 0,
-                    "passes": denorm.count_pass,
-                    "total": denorm.count_pass + denorm.count_fail,
-                    "test_run_uuid": test_run.analyzer_assigned_uuid,
-                    "bug_links": bug_links,
-                    "metadata_content": metadata_content,
-                    "comments": has_comments,
-                }
 
-                chart_data["test_data"].append(chart_item)
+                # Find already existing chart item (this happens if we're
+                # dealing with parametrized tests) and add the values instead
+                # of creating new chart item.
+                found = False
+                for chart_item in chart_data["test_data"]:
+                    if chart_item["test_filter_id"] == test_filter_id and \
+                            chart_item["number"] == str(match.tag):
+                        chart_item["passes"] += denorm.count_pass
+                        chart_item["skip"] += denorm.count_skip
+                        chart_item["total"] += denorm.count_all()
+                        chart_item["link"] = test_run.bundle.get_absolute_url()
+                        chart_item["pass"] &= denorm.count_fail == 0
+                        found = True
+
+                # If no existing chart item was found, create a new one.
+                if not found:
+                    chart_item = {
+                        "filter_rep": image_chart_filter.representation,
+                        "test_filter_id": test_filter_id,
+                        "chart_test_id": chart_test_id,
+                        "link": test_run.get_absolute_url(),
+                        "bundle_link": test_run.bundle.get_absolute_url(),
+                        "alias": alias,
+                        "number": str(match.tag),
+                        "date": str(test_run.bundle.uploaded_on),
+                        "pass": denorm.count_fail == 0,
+                        "passes": denorm.count_pass,
+                        "skip": denorm.count_skip,
+                        "total": denorm.count_all(),
+                        "test_run_uuid": test_run.analyzer_assigned_uuid,
+                        "bug_links": bug_links,
+                        "metadata_content": metadata_content,
+                        "comments": has_comments,
+                    }
+
+                    chart_data["test_data"].append(chart_item)
 
     def get_chart_test_case_data(self, user, image_chart_filter, filter_data,
                                  chart_data):
@@ -2344,6 +2358,8 @@ class ImageChartTest(models.Model):
         filter_data = self.image_chart_filter.filter.as_data()
         filter_data['tests'] = tests
         matches = list(evaluate_filter(user, filter_data)[:1])
+        if not matches or not matches[0].test_runs:
+            return list()
         test_run_id = matches[0].test_runs[0].id
 
         result = NamedAttribute.objects.all()
