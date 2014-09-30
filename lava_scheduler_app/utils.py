@@ -278,7 +278,13 @@ def get_fqdn():
 def get_ip_address():
     """Returns the IP address.
     """
-    return socket.gethostbyname_ex(socket.getfqdn())[2][0]
+    # psw0523 fix
+    #return socket.gethostbyname_ex(socket.getfqdn())[2][0]
+    import socket
+    import fcntl
+    import struct
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    return socket.inet_ntoa(fcntl.ioctl(s.fileno(), 0x8915, struct.pack('256s', 'eth0'))[20:24])
 
 
 def format_sw_info_to_html(data_dict):
